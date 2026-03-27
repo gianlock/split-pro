@@ -1,7 +1,6 @@
 import { SiGithub, SiX } from '@icons-pack/react-simple-icons';
 import {
   BadgeInfo,
-  BugOff,
   CreditCard,
   Download,
   DownloadCloud,
@@ -9,6 +8,7 @@ import {
   HeartHandshakeIcon,
   Languages,
   Star,
+  Zap,
 } from 'lucide-react';
 import type { GetServerSideProps } from 'next';
 import { signOut } from 'next-auth/react';
@@ -26,6 +26,7 @@ import { UpdateName } from '~/components/Account/UpdateName';
 import MainLayout from '~/components/Layout/MainLayout';
 import { EntityAvatar } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
+import { AppDrawer } from '~/components/ui/drawer';
 import { env } from '~/env';
 import { customServerSideTranslations } from '~/utils/i18n/server';
 import { BankConnection } from '~/components/Account/BankAccount/BankConnection';
@@ -37,6 +38,7 @@ import {
 import { api } from '~/utils/api';
 import type { NextPageWithUser } from '~/types';
 import { DebugInfo } from '~/components/Account/DebugInfo';
+import { LightningSettings } from '~/components/Settings/LightningSettings';
 import { execSync } from 'node:child_process';
 
 const AccountPage: NextPageWithUser<{
@@ -133,6 +135,21 @@ const AccountPage: NextPageWithUser<{
             </AccountButton>
           </BankConnection>
 
+          {env.NEXT_PUBLIC_LIGHTNING_ENABLED && (
+            <AppDrawer
+              trigger={
+                <AccountButton>
+                  <Zap className="size-5 text-yellow-500" />
+                  Lightning Payments
+                </AccountButton>
+              }
+              title="Lightning Settings"
+              className="h-[60vh]"
+            >
+              <LightningSettings />
+            </AppDrawer>
+          )}
+
           {isCloud && (
             <AccountButton href="https://twitter.com/KM_Koushik_">
               <SiX className="size-5" />
@@ -208,8 +225,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   return {
     props: {
-      feedbackPossible: !!env.FEEDBACK_EMAIL,
-      bankConnectionEnabled: !!isBankConnectionConfigured(),
+      feedbackPossible: Boolean(env.FEEDBACK_EMAIL),
+      bankConnectionEnabled: Boolean(isBankConnectionConfigured()),
       bankConnection: whichBankConnectionConfigured(),
       gitRevision,
       ...(await customServerSideTranslations(context.locale, ['common'])),

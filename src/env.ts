@@ -70,6 +70,9 @@ export const env = createEnv({
     OIDC_CLIENT_SECRET: z.string().optional(),
     OIDC_WELL_KNOWN_URL: z.string().optional(),
     OIDC_ALLOW_DANGEROUS_EMAIL_LINKING: z.boolean().optional(),
+    LIGHTNING_ENABLED: z.boolean().default(false),
+    BTC_RATE_SOURCE: z.enum(['coingecko', 'yadio']).default('coingecko'),
+    LIGHTNING_WEBHOOK_SECRET: z.string().optional(),
   },
 
   /**
@@ -81,6 +84,7 @@ export const env = createEnv({
     NEXT_PUBLIC_FRANKFURTER_USED: z.boolean().default(false),
     NEXT_PUBLIC_IS_CLOUD_DEPLOYMENT: z.boolean().default(false),
     NEXT_PUBLIC_VERSION: z.string().optional(),
+    NEXT_PUBLIC_LIGHTNING_ENABLED: z.boolean().default(false),
   },
 
   /**
@@ -92,7 +96,7 @@ export const env = createEnv({
       process.env.DATABASE_URL ??
       `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@${process.env.POSTGRES_HOST}:${process.env.POSTGRES_PORT}`,
     NODE_ENV: process.env.NODE_ENV,
-    DOCKER_OUTPUT: !!process.env.DOCKER_OUTPUT,
+    DOCKER_OUTPUT: Boolean(process.env.DOCKER_OUTPUT),
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXTAUTH_URL_INTERNAL: process.env.NEXTAUTH_URL_INTERNAL ?? process.env.NEXTAUTH_URL,
@@ -135,16 +139,21 @@ export const env = createEnv({
     OIDC_CLIENT_ID: process.env.OIDC_CLIENT_ID,
     OIDC_CLIENT_SECRET: process.env.OIDC_CLIENT_SECRET,
     OIDC_WELL_KNOWN_URL: process.env.OIDC_WELL_KNOWN_URL,
-    OIDC_ALLOW_DANGEROUS_EMAIL_LINKING: !!process.env.OIDC_ALLOW_DANGEROUS_EMAIL_LINKING,
+    OIDC_ALLOW_DANGEROUS_EMAIL_LINKING: Boolean(process.env.OIDC_ALLOW_DANGEROUS_EMAIL_LINKING),
+    LIGHTNING_ENABLED: 'true' === process.env.LIGHTNING_ENABLED,
+    BTC_RATE_SOURCE: process.env.BTC_RATE_SOURCE,
+    LIGHTNING_WEBHOOK_SECRET: process.env.LIGHTNING_WEBHOOK_SECRET,
     NEXT_PUBLIC_FRANKFURTER_USED: process.env.CURRENCY_RATE_PROVIDER === 'frankfurter',
     NEXT_PUBLIC_IS_CLOUD_DEPLOYMENT: process.env.NEXTAUTH_URL?.includes('splitpro.app') ?? false,
     NEXT_PUBLIC_VERSION: process.env.APP_VERSION,
+    NEXT_PUBLIC_LIGHTNING_ENABLED:
+      'true' === (process.env.NEXT_PUBLIC_LIGHTNING_ENABLED ?? process.env.LIGHTNING_ENABLED),
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
    * useful for Docker builds.
    */
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  skipValidation: Boolean(process.env.SKIP_ENV_VALIDATION),
   /**
    * Makes it so that empty strings are treated as undefined. `SOME_VAR: z.string()` and
    * `SOME_VAR=''` will throw an error.

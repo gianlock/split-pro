@@ -39,29 +39,33 @@ model Session {
 }
 
 model User {
-  id                  Int                  @id @default(autoincrement())
-  name                String?
-  email               String?              @unique
-  emailVerified       DateTime?
-  image               String?
-  currency            String               @default("USD")
-  preferredLanguage   String               @default("")
-  bankingId           String?
-  obapiProviderId     String?
-  accounts            Account[]
-  friendBalances      BalanceView[]        @relation("FriendBalanceView")
-  userBalances        BalanceView[]        @relation("UserBalanceView")
-  cachedBankData      CachedBankData[]     @relation("UserCachedBankData")
-  addedExpenses       Expense[]            @relation("AddedByUser")
-  deletedExpenses     Expense[]            @relation("DeletedByUser")
-  paidExpenses        Expense[]            @relation("PaidByUser")
-  updatedExpenses     Expense[]            @relation("UpdatedByUser")
-  expenseNotes        ExpenseNote[]
-  expenseParticipants ExpenseParticipant[]
-  groups              Group[]
-  associatedGroups    GroupUser[]
-  sessions            Session[]
-  hiddenFriendIds     Int[]                @default([])
+  id                        Int                  @id @default(autoincrement())
+  name                      String?
+  email                     String?              @unique
+  emailVerified             DateTime?
+  image                     String?
+  currency                  String               @default("USD")
+  preferredLanguage         String               @default("")
+  bankingId                 String?
+  obapiProviderId           String?
+  lightningAddress          String?
+  nwcConnectionString       String?
+  accounts                  Account[]
+  friendBalances            BalanceView[]        @relation("FriendBalanceView")
+  userBalances              BalanceView[]        @relation("UserBalanceView")
+  cachedBankData            CachedBankData[]     @relation("UserCachedBankData")
+  addedExpenses             Expense[]            @relation("AddedByUser")
+  deletedExpenses           Expense[]            @relation("DeletedByUser")
+  paidExpenses              Expense[]            @relation("PaidByUser")
+  updatedExpenses           Expense[]            @relation("UpdatedByUser")
+  expenseNotes              ExpenseNote[]
+  expenseParticipants       ExpenseParticipant[]
+  groups                    Group[]
+  associatedGroups          GroupUser[]
+  sessions                  Session[]
+  hiddenFriendIds           Int[]                @default([])
+  lightningPaymentsPayer    LightningPayment[]   @relation("LightningPaymentPayer")
+  lightningPaymentsReceiver LightningPayment[]   @relation("LightningPaymentReceiver")
 
   @@schema("public")
 }
@@ -92,20 +96,21 @@ model Balance {
 }
 
 model Group {
-  id               Int           @id @default(autoincrement())
-  publicId         String        @unique
-  name             String
-  userId           Int
-  defaultCurrency  String        @default("USD")
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  splitwiseGroupId String?       @unique
-  simplifyDebts    Boolean       @default(false)
-  archivedAt       DateTime?
-  expenses         Expense[]
-  createdBy        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  groupUsers       GroupUser[]
-  groupBalances    BalanceView[]
+  id                Int                @id @default(autoincrement())
+  publicId          String             @unique
+  name              String
+  userId            Int
+  defaultCurrency   String             @default("USD")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  splitwiseGroupId  String?            @unique
+  simplifyDebts     Boolean            @default(false)
+  archivedAt        DateTime?
+  expenses          Expense[]
+  createdBy         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupUsers        GroupUser[]
+  groupBalances     BalanceView[]
+  lightningPayments LightningPayment[]
 
   @@schema("public")
 }
@@ -166,6 +171,7 @@ model Expense {
   updatedByUser       User?                @relation("UpdatedByUser", fields: [updatedBy], references: [id])
   expenseNotes        ExpenseNote[]
   expenseParticipants ExpenseParticipant[]
+  lightningPayment    LightningPayment?
 
   @@index([groupId])
   @@index([paidBy])
@@ -191,6 +197,28 @@ model ExpenseNote {
   expenseId   String   @db.Uuid
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
   expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@schema("public")
+}
+
+model LightningPayment {
+  id          String   @id @default(cuid())
+  expenseId   String?  @unique @db.Uuid
+  expense     Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  paymentHash String?
+  invoice     String?
+  amountSats  BigInt
+  amountCents BigInt
+  currency    String   @default("USD")
+  payerId     Int
+  payer       User     @relation("LightningPaymentPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  receiverId  Int
+  receiver    User     @relation("LightningPaymentReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  groupId     Int?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@schema("public")
 }

@@ -48,6 +48,8 @@ const AddPage: NextPageWithUser<{
       image: user.image ?? null,
       obapiProviderId: user.obapiProviderId ?? null,
       bankingId: user.bankingId ?? null,
+      lightningAddress: null,
+      nwcConnectionString: null,
     });
   }, [setCurrentUser, user]);
 

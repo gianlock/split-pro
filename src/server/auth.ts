@@ -3,6 +3,7 @@ import { type GetServerSidePropsContext } from 'next';
 import { type DefaultSession, type NextAuthOptions, type User, getServerSession } from 'next-auth';
 import { type Adapter, type AdapterAccount, type AdapterUser } from 'next-auth/adapters';
 import AuthentikProvider from 'next-auth/providers/authentik';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
 import GoogleProvider from 'next-auth/providers/google';
 import KeycloakProvider from 'next-auth/providers/keycloak';
@@ -30,7 +31,7 @@ declare module 'next-auth' {
       preferredLanguage: string;
       hiddenFriendIds: number[];
       // ...other properties
-      // role: UserRole;
+      // Role: UserRole;
     };
   }
 
@@ -108,23 +109,26 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/auth/signin',
   },
+  session: {
+    strategy: 'jwt',
+  },
   callbacks: {
-    session: ({ session, user }) => ({
+    session: ({ session, token }) => ({
       ...session,
       user: {
         ...session.user,
-        id: user.id,
-        currency: user.currency,
-        obapiProviderId: user.obapiProviderId,
-        bankingId: user.bankingId,
-        preferredLanguage: user.preferredLanguage,
-        hiddenFriendIds: user.hiddenFriendIds,
+        id: typeof token.sub === 'string' ? parseInt(token.sub, 10) : (token.sub ?? 0),
+        currency: (token.currency as string) ?? 'USD',
+        obapiProviderId: token.obapiProviderId as string | undefined,
+        bankingId: token.bankingId as string | undefined,
+        preferredLanguage: (token.preferredLanguage as string) ?? '',
+        hiddenFriendIds: (token.hiddenFriendIds as number[]) ?? [],
       },
     }),
     async signIn({ user, email }) {
       if (email?.verificationRequest && env.DISABLE_EMAIL_SIGNUP) {
         const existingUser = await db.user.findUnique({
-          where: { email: user.email! },
+          where: { email: user.email },
         });
 
         if (!existingUser) {
@@ -133,6 +137,23 @@ export const authOptions: NextAuthOptions = {
       }
 
       return true;
+    },
+    async jwt({ token, user, account: _account }) {
+      if (user) {
+        // Fetch full user data from database
+        const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
+        const dbUser = await db.user.findUnique({
+          where: { id: userId },
+        });
+        if (dbUser) {
+          token.currency = dbUser.currency;
+          token.obapiProviderId = dbUser.obapiProviderId;
+          token.bankingId = dbUser.bankingId;
+          token.preferredLanguage = dbUser.preferredLanguage;
+          token.hiddenFriendIds = dbUser.hiddenFriendIds;
+        }
+      }
+      return token;
     },
   },
   adapter: SplitProPrismaAdapter(db),
@@ -190,6 +211,49 @@ export const getServerAuthSessionForSSG = async (context: GetServerSidePropsCont
  */
 function getProviders() {
   const providersList = [];
+
+  // Development-only credentials provider for easy local testing
+  if (env.NODE_ENV === 'development' && !process.env.DISABLE_DEV_AUTH) {
+    providersList.push(
+      CredentialsProvider({
+        id: 'dev',
+        name: 'Dev Login',
+        credentials: {
+          email: {
+            label: 'Email',
+            type: 'email',
+            placeholder: 'dev@example.com',
+            value: 'dev@example.com',
+          },
+        },
+        async authorize(credentials, req) {
+          // Use email from credentials, or default to dev@example.com
+          const email = (credentials?.email as string) ?? 'dev@example.com';
+          // Find or create a dev user
+          let user = await db.user.findUnique({ where: { email } });
+          if (!user) {
+            user = await db.user.create({
+              data: {
+                email,
+                name: email.split('@')[0],
+                emailVerified: new Date(),
+              },
+            });
+          }
+          // Return user - next-auth will pass to session callback
+          return {
+            id: user.id,
+            email: user.email ?? email,
+            name: user.name ?? email.split('@')[0],
+            image: user.image ?? null,
+            currency: user.currency,
+            preferredLanguage: user.preferredLanguage,
+            hiddenFriendIds: user.hiddenFriendIds,
+          } as unknown as User;
+        },
+      }),
+    );
+  }
 
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
     providersList.push(
@@ -261,8 +325,8 @@ function getProviders() {
       idToken: true,
       profile(profile) {
         // This function expects a "standard" next-auth user but we override
-        // what a next-auth user is above.  The expected next-auth user must be
-        // a record that has an id, a name, an email, and an image.
+        // What a next-auth user is above.  The expected next-auth user must be
+        // A record that has an id, a name, an email, and an image.
         //
         // To work around this, we case to unknown and then `User`.
         return {

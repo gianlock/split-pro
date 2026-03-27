@@ -1,5 +1,5 @@
 import { SplitType, type User } from '@prisma/client';
-import { ArrowRightIcon } from 'lucide-react';
+import { ArrowRightIcon, Zap } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -15,6 +15,9 @@ import { Button } from '../ui/button';
 import { CurrencyInput } from '../ui/currency-input';
 import { AppDrawer } from '../ui/drawer';
 import { FriendBalance } from './FriendBalance';
+import { LightningPayment } from './LightningPayment';
+
+type ViewMode = 'balance-select' | 'settle' | 'lightning';
 
 export const SettleUp: React.FC<
   React.PropsWithChildren<{
@@ -25,6 +28,14 @@ export const SettleUp: React.FC<
   const { t, displayName, getCurrencyHelpersCached } = useTranslationWithUtils();
   const { data } = useSession();
   const currentUser = data?.user;
+
+  const { data: lightningEnabled } = api.lightning.isEnabled.useQuery(undefined, {
+    staleTime: Infinity,
+  });
+  const { data: receiverLightningAddress } = api.lightning.getUserLightningAddress.useQuery(
+    { userId: friend.id },
+    { enabled: Boolean(lightningEnabled?.enabled) },
+  );
 
   if (!currentUser) {
     return null;
@@ -47,8 +58,13 @@ export const SettleUp: React.FC<
   const [amountStr, setAmountStr] = useState<string>(
     getCurrencyHelpersCached(balanceToSettle?.currency ?? '').toUIString(amount),
   );
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    1 < balances.length ? 'balance-select' : 'settle',
+  );
 
   const isCurrentUserPaying = 0 > (balanceToSettle?.amount ?? 0);
+  const canPayWithLightning =
+    lightningEnabled?.enabled && receiverLightningAddress?.address && isCurrentUserPaying;
 
   function onSelectBalance(balance: MinimalBalance) {
     setBalanceToSettle(balance);
@@ -56,6 +72,7 @@ export const SettleUp: React.FC<
     setAmountStr(
       getCurrencyHelpersCached(balance.currency).toUIString(BigMath.abs(balance.amount)),
     );
+    setViewMode('settle');
   }
 
   const addExpenseMutation = api.expense.addOrEditExpense.useMutation();
@@ -90,6 +107,7 @@ export const SettleUp: React.FC<
         onSuccess: () => {
           utils.user.invalidate().catch(console.error);
           utils.expense.invalidate().catch(console.error);
+          toast.success(t('ui.settlement'));
         },
         onError: (error) => {
           console.error('Error while saving expense:', error);
@@ -121,10 +139,23 @@ export const SettleUp: React.FC<
   );
 
   const onBackClick = React.useCallback(() => {
-    if (balanceToSettle) {
+    if (viewMode === 'lightning') {
+      setViewMode('settle');
+    } else if (balanceToSettle) {
       setBalanceToSettle(undefined);
+      setViewMode('balance-select');
     }
-  }, [balanceToSettle]);
+  }, [viewMode, balanceToSettle]);
+
+  const getDrawerTitle = () => {
+    if (viewMode === 'lightning') {
+      return 'Pay with Lightning';
+    }
+    if (balanceToSettle) {
+      return t('ui.settle_up_name');
+    }
+    return t('ui.select_balance');
+  };
 
   return (
     <AppDrawer
@@ -133,14 +164,14 @@ export const SettleUp: React.FC<
       leftAction={t('actions.back')}
       leftActionOnClick={onBackClick}
       shouldCloseOnLeftAction={false}
-      title={balanceToSettle ? t('ui.settle_up_name') : t('ui.select_balance')}
+      title={getDrawerTitle()}
       className="h-[70vh]"
-      actionTitle={t('actions.save')}
-      actionDisabled={!balanceToSettle || !amount}
+      actionTitle={viewMode === 'lightning' ? undefined : t('actions.save')}
+      actionDisabled={!balanceToSettle || !amount || viewMode === 'lightning'}
       actionOnClick={saveExpense}
-      shouldCloseOnAction
+      shouldCloseOnAction={viewMode !== 'lightning'}
     >
-      {!balanceToSettle ? (
+      {viewMode === 'balance-select' ? (
         <div>
           {balances?.map((b) => (
             <div
@@ -152,8 +183,21 @@ export const SettleUp: React.FC<
             </div>
           ))}
         </div>
+      ) : viewMode === 'lightning' && balanceToSettle ? (
+        <LightningPayment
+          amount={amount}
+          currency={balanceToSettle.currency}
+          receiverUserId={friend.id}
+          receiverName={displayName(friend)}
+          receiverLightningAddress={receiverLightningAddress?.address}
+          onManualSettle={() => {
+            saveExpense();
+            setViewMode('settle');
+          }}
+          onCancel={() => setViewMode('settle')}
+        />
       ) : (
-        <div className="mt-10 flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-6 pt-10">
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-5">
               <EntityAvatar entity={isCurrentUserPaying ? currentUser : friend} />
@@ -165,16 +209,23 @@ export const SettleUp: React.FC<
                 ? `${t('actors.you')} ${t('ui.expense.you.pay')} ${displayName(friend)}`
                 : `${displayName(friend)} ${t('ui.expense.user.pay')} ${t('actors.you')}`}
             </p>
-            {balanceToSettle.groupName ? (
+            {balanceToSettle?.groupName ? (
               <p className="mt-1 text-center text-xs text-gray-500">{balanceToSettle.groupName}</p>
             ) : null}
           </div>
           <CurrencyInput
-            currency={balanceToSettle.currency}
+            currency={balanceToSettle?.currency ?? ''}
             strValue={amountStr}
             className="mx-auto mt-4 w-[150px] text-center text-lg"
             onValueChange={onCurrencyInputValueChange}
           />
+
+          {canPayWithLightning && (
+            <Button variant="outline" onClick={() => setViewMode('lightning')} className="mt-4">
+              <Zap className="mr-2 h-4 w-4 text-yellow-500" />
+              Pay with Lightning
+            </Button>
+          )}
         </div>
       )}
     </AppDrawer>

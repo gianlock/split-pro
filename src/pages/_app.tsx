@@ -5,7 +5,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { type Session } from 'next-auth';
 import { SessionProvider, useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Toaster } from 'sonner';
 import { appWithTranslation, useTranslation } from 'next-i18next';
 import i18nConfig from '@/next-i18next.config.js';
@@ -27,18 +27,10 @@ const MyApp: AppType<{ session: Session | null; baseUrl: string }> = ({
   Component,
   pageProps: { session, baseUrl, ...pageProps },
 }) => {
-  const { t, ready } = useTranslation();
-
-  if (!ready) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <LoadingSpinner className="text-primary" />
-      </div>
-    );
-  }
+  const { t } = useTranslation();
 
   return (
-    <main className={clsx(poppins.className, 'h-full')}>
+    <main className={clsx(poppins.className, 'h-full')} suppressHydrationWarning>
       <Head>
         <title>{t('meta.title')}</title>
         <link rel="icon" href="/favicon.ico" />
@@ -100,6 +92,7 @@ const Auth: React.FC<{ Page: NextPageWithUser; pageProps: any }> = ({ Page, page
   const [showSpinner, setShowSpinner] = useState(false);
   const updateUser = api.user.updateUserDetail.useMutation();
   const router = useRouter();
+  const updateInitiated = useRef(false);
 
   const { setCurrency } = useAddExpenseStore((s) => s.actions);
   const { setWebPushPublicKey } = useAppStore((s) => s.actions);
@@ -119,14 +112,14 @@ const Auth: React.FC<{ Page: NextPageWithUser; pageProps: any }> = ({ Page, page
   }, [webPushPublicKey, setWebPushPublicKey]);
 
   useEffect(() => {
-    if ('authenticated' === status && data.user) {
+    if ('authenticated' === status && data.user && !updateInitiated.current) {
       setCurrency(parseCurrencyCode(data.user.currency));
 
-      if (!data.user.preferredLanguage) {
+      if (!data.user.preferredLanguage || data.user.preferredLanguage === '') {
         // If user has no preferred language, set it to the current locale
         const currentLocale = router.locale ?? 'en';
+        updateInitiated.current = true;
 
-        data.user.preferredLanguage = currentLocale;
         updateUser
           .mutateAsync({
             preferredLanguage: currentLocale,
@@ -142,7 +135,7 @@ const Auth: React.FC<{ Page: NextPageWithUser; pageProps: any }> = ({ Page, page
           .catch(console.error);
       } else if (data.user.preferredLanguage === 'pt') {
         // Fix for 'pt' preferred language to 'pt-PT'
-        data.user.preferredLanguage = 'pt-PT';
+        updateInitiated.current = true;
         updateUser
           .mutateAsync({
             preferredLanguage: 'pt-PT',

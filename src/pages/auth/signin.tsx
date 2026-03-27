@@ -132,7 +132,23 @@ const Home: NextPage<{
   }, [showVerificationStep]);
 
   const handleProviderSignIn = useCallback(
-    (providerId: string) => () => signIn(providerId, { callbackUrl }),
+    (providerId: string) => async () => {
+      if (providerId === 'dev') {
+        // Dev login - use the built-in signIn which handles CSRF
+        try {
+          await signIn('dev', {
+            email: 'dev@example.com',
+            callbackUrl: callbackUrl ? String(callbackUrl) : '/',
+            redirect: true,
+          });
+        } catch (error) {
+          console.error('Dev login error:', error);
+          toast.error('Login failed. Please try again.');
+        }
+      } else {
+        void signIn(providerId, { callbackUrl });
+      }
+    },
     [callbackUrl],
   );
 
@@ -213,6 +229,62 @@ const Home: NextPage<{
                         {t('auth.continue_with', { provider: provider.name })}
                       </Button>
                     ))}
+
+                  {/* Dev test users - only show in development */}
+                  {providers.find((p) => p.id === 'dev') && (
+                    <div className="mt-4 flex w-[300px] flex-col items-center gap-2">
+                      <p className="text-muted-foreground text-xs">Test Users (dev only)</p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs"
+                          onClick={() => {
+                            void fetch('/api/auth/csrf')
+                              .then((r) => r.json())
+                              .then(({ csrfToken }) => {
+                                const form = document.createElement('form');
+                                form.method = 'POST';
+                                form.action = '/api/auth/callback/dev';
+                                form.innerHTML = `
+                                  <input name="csrfToken" value="${csrfToken}" type="hidden">
+                                  <input name="email" value="alice@test.com" type="hidden">
+                                  <input name="callbackUrl" value="/balances" type="hidden">
+                                `;
+                                document.body.appendChild(form);
+                                form.submit();
+                              });
+                          }}
+                        >
+                          Login as Alice
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs"
+                          onClick={() => {
+                            void fetch('/api/auth/csrf')
+                              .then((r) => r.json())
+                              .then(({ csrfToken }) => {
+                                const form = document.createElement('form');
+                                form.method = 'POST';
+                                form.action = '/api/auth/callback/dev';
+                                form.innerHTML = `
+                                  <input name="csrfToken" value="${csrfToken}" type="hidden">
+                                  <input name="email" value="bob@test.com" type="hidden">
+                                  <input name="callbackUrl" value="/balances" type="hidden">
+                                `;
+                                document.body.appendChild(form);
+                                form.submit();
+                              });
+                          }}
+                        >
+                          Login as Bob
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {providers && 2 === providers.length && (
                     <div className="mt-6 flex w-[300px] items-center justify-between gap-2">
                       <p className="bg-background z-10 ml-[150px] -translate-x-1/2 px-4 text-sm">
